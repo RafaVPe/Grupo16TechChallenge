@@ -58,5 +58,5 @@ Como a variavel target tem N respostas, seria uma classificação multiclasses, 
 Assertividade acima de 75%.
 
 - Qual será o entregável final para o médico? 
-Um modelo online feito com streamlit para que os médicos possam colocar as informações de cada individuo e o modelo prever o grau/nível de obesidade de cada indivíduo. Também será entregue uma visão análitica construida em um painel(BI) com principais insights obtidos com o estudo.
+Um modelo online feito com streamlit para que os médicos possam colocar as informações de cada individuo e o modelo prever o grau/nível de obesidade de cada indivíduo. Também será entregue uma visão análitica construida com principais insights obtidos com o estudo.
 
