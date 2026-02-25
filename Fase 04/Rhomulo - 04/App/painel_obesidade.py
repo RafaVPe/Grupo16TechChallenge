@@ -23,7 +23,7 @@ PIPELINE_PATHS = [
 
 # Configuração da página
 st.set_page_config(
-    page_title="Painel Obesidade | Insights para Equipe Médica",
+    page_title="Sistema de Apoio ao Diagnóstico de Obesidade",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -84,6 +84,7 @@ def carregar_dados():
 df = carregar_dados()
 
 # Navegação
+st.sidebar.header("Sistema de Apoio ao Diagnóstico de Obesidade")
 pagina = st.sidebar.radio(
     "Navegação",
     ["Painel analítico", "Predição pelo modelo"],
