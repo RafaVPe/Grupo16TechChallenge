@@ -179,9 +179,12 @@ def gerar_insights_dinamicos(df_filtrado, df_total, faixa_etaria, genero_filtro)
     return insights
 
 
-def gerar_dicas_predicao(predicao, paciente):
-    """Gera dicas personalizadas com base na classificação e no perfil do paciente."""
+def gerar_dicas_predicao(predicao, paciente, rotina_ambiente=None):
+    """Gera dicas personalizadas com base na classificação, perfil e (opcional) rotina/ambiente.
+    rotina_ambiente: dict com sono(1-4), estresse(1-5), saude_mental(1-2), ambiente(1-4). 0 = não informado.
+    Retorna (dicas, rotinas_sugeridas)."""
     dicas = []
+    rotinas = []
     faf = int(paciente.get("FAF", 1))
     mtrans = paciente.get("MTRANS", "")
     fcvc = int(paciente.get("FCVC", 2))
@@ -198,7 +201,7 @@ def gerar_dicas_predicao(predicao, paciente):
     elif "Overweight" in predicao or "Obesity" in predicao:
         dicas.append("**Atenção ao peso:** Recomenda-se acompanhamento médico ou nutricional. Pequenas mudanças no dia a dia podem fazer diferença.")
 
-    # Transporte — incentivo a bicicleta/a pé (quando usa carro, ônibus ou moto)
+    # Transporte — incentivo a bicicleta/a pé
     if mtrans in ("Automobile", "Public_Transportation", "Motorbike") and ("Overweight" in predicao or "Obesity" in predicao or faf <= 1):
         dicas.append("**Transporte:** Considerar **usar bicicleta ou ir a pé** em trajetos curtos quando possível — aumenta a atividade física no dia a dia sem precisar de academia.")
 
@@ -232,7 +235,39 @@ def gerar_dicas_predicao(predicao, paciente):
     if "Obesity_Type_II" in predicao or "Obesity_Type_III" in predicao:
         dicas.append("**Importante:** Em níveis mais elevados de obesidade, o acompanhamento médico é fundamental para um plano adequado e seguro.")
 
-    return dicas if dicas else ["Manter hábitos saudáveis e consultar um profissional de saúde para orientações personalizadas."]
+    # --- Dicas e rotinas com base em rotina_ambiente (Etapa 2) ---
+    if rotina_ambiente:
+        r = rotina_ambiente
+        sono, estresse, saude_mental, ambiente = r.get("sono", 0), r.get("estresse", 0), r.get("saude_mental", 0), r.get("ambiente", 0)
+
+        if sono >= 3:  # 6h ou menos
+            dicas.append("**Sono:** Menos de 7h de sono está associado a maior risco de ganho de peso e pior adesão a hábitos saudáveis. Priorize horário fixo para dormir e evite telas 1h antes.")
+        if estresse >= 4:
+            dicas.append("**Estresse:** Níveis altos de estresse podem afetar alimentação e atividade física. Técnicas como respiração, alongamento ou caminhadas curtas ajudam a reduzir.")
+        if saude_mental == 1:
+            dicas.append("**Saúde mental:** Ansiedade e depressão podem influenciar o peso. O acompanhamento em conjunto com profissional de saúde mental é recomendado.")
+        if ambiente == 4 and ("Overweight" in predicao or "Obesity" in predicao):
+            dicas.append("**Ambiente:** Sem acesso fácil a parques ou academias, priorize atividades em casa (alongamento, exercícios com peso do corpo) ou caminhadas no quarteirão.")
+        elif ambiente in (1, 3) and faf <= 1:
+            dicas.append("**Ambiente:** Você tem acesso a parques — aproveitar para caminhadas ou corridas leves ao ar livre pode ser um bom começo.")
+
+        # Rotinas ideais sugeridas
+        if sono >= 3 and estresse >= 4:
+            rotinas.append("**Priorize o sono e o estresse:** Horário fixo para dormir; 10 min de respiração ou alongamento antes de dormir; evite café depois das 14h. Caminhadas curtas no dia ajudam a reduzir estresse e cansaço.")
+        elif sono >= 3:
+            rotinas.append("**Rotina de sono:** Tente dormir e acordar em horários próximos todos os dias; ambiente escuro e fresco; evite telas 1h antes de deitar.")
+        elif estresse >= 4:
+            rotinas.append("**Rotina antiestresse:** Inclua pausas de 5–10 min para respiração ou alongamento; caminhada de 15–20 min ao ar livre; evite acumular tarefas no fim do dia.")
+        if saude_mental == 1:
+            rotinas.append("**Rotina com saúde mental:** Pequenos passos e consistência valem mais que mudanças radicais. Alinhe alimentação e atividade física com seu acompanhamento em saúde mental.")
+        if ambiente == 1 or ambiente == 3:  # parques ou ambos
+            rotinas.append("**Rotina com parque:** Caminhadas de 30 min, 3× por semana, de manhã ou fim de tarde. Pode começar com 15 min e aumentar gradualmente.")
+        elif ambiente == 2:  # academias
+            rotinas.append("**Rotina com academia:** Consulte um educador físico para um plano adequado. Comece com 2–3× por semana, 30–40 min, combinando cardio e fortalecimento.")
+        elif ambiente == 4 and ("Overweight" in predicao or "Obesity" in predicao):
+            rotinas.append("**Rotina em casa:** Alongamento + exercícios com peso do corpo (agachamentos, flexões adaptadas, prancha) 3× por semana; caminhadas de 20 min no quarteirão em dias alternados.")
+
+    return (dicas if dicas else ["Manter hábitos saudáveis e consultar um profissional de saúde para orientações personalizadas."], rotinas)
 
 
 if pagina == "Predição pelo modelo":
@@ -264,6 +299,23 @@ if pagina == "Predição pelo modelo":
                 tue = st.select_slider("Tempo em eletrônicos por dia (0–2)", options=[0, 1, 2], value=1)
                 calc = CAEC_CALC[st.selectbox("Consumo de álcool", ["Não", "Às vezes", "Frequentemente", "Sempre"])]
                 mtrans = MTRANS_PT[st.selectbox("Meio de transporte", ["Carro", "Moto", "Bicicleta", "Transporte público", "A pé"])]
+
+            with st.expander("**Etapa 2 – Rotina e ambiente** *(opcional, para dicas mais personalizadas)*"):
+                st.caption("Estas informações **não alteram a predição** do modelo. Preencha apenas se quiser receber dicas e rotinas mais específicas.")
+                col_r1, col_r2 = st.columns(2)
+                with col_r1:
+                    sono_opts = {"— Não informado": 0, "Mais de 8h diárias": 1, "Entre 7 e 8h diárias": 2, "6h diárias": 3, "Abaixo de 6h": 4}
+                    sono_label = st.selectbox("Qualidade do sono", list(sono_opts.keys()), key="sono")
+                    sono = sono_opts[sono_label]
+                    estresse = st.select_slider("Nível de estresse diário (1=baixo, 5=alto)", options=[0, 1, 2, 3, 4, 5], value=0, format_func=lambda x: "— Não informado" if x == 0 else str(x), key="estresse")
+                with col_r2:
+                    saude_mental_opts = {"— Não informado": 0, "Diagnosticado(a) com ansiedade ou depressão": 1, "Não diagnosticado(a)": 2}
+                    sm_label = st.selectbox("Saúde mental", list(saude_mental_opts.keys()), key="sm")
+                    saude_mental = saude_mental_opts[sm_label]
+                    ambiente_opts = {"— Não informado": 0, "Próximo a parques": 1, "Próximo a academias": 2, "Próximo a ambos": 3, "Não próximo a parques ou academias": 4}
+                    amb_label = st.selectbox("Ambiente", list(ambiente_opts.keys()), key="amb")
+                    ambiente = ambiente_opts[amb_label]
+
             submitted = st.form_submit_button("Obter predição")
         if submitted:
             paciente = {
@@ -280,7 +332,7 @@ if pagina == "Predição pelo modelo":
                 with col_res1:
                     st.success(f"**Regressão Logística:** {OBESIDADE_PT.get(pred_lr, pred_lr)}")
                 with col_res2:
-                    st.success(f"**Random Forest:** {OBESIDADE_PT.get(pred_rf, pred_rf)}")
+                    st.success(f"**Random Forest (Modelo selecionado pelo grupo):** {OBESIDADE_PT.get(pred_rf, pred_rf)}")
                 if pred_lr == pred_rf:
                     st.info("Ambos os modelos concordam na classificação.")
                 else:
@@ -291,11 +343,17 @@ if pagina == "Predição pelo modelo":
                 st.success(f"**Classificação predita:** {OBESIDADE_PT.get(pred, pred)}")
                 pred_para_dicas = pred
 
-            # Dicas personalizadas
-            dicas = gerar_dicas_predicao(pred_para_dicas, paciente)
+            # Dicas personalizadas (rotina_ambiente opcional — 0 = não informado)
+            rotina = {"sono": sono, "estresse": estresse, "saude_mental": saude_mental, "ambiente": ambiente}
+            tem_rotina = any(rotina.get(k, 0) != 0 for k in ["sono", "estresse", "saude_mental", "ambiente"])
+            dicas, rotinas = gerar_dicas_predicao(pred_para_dicas, paciente, rotina if tem_rotina else None)
             with st.expander("💡 Dicas personalizadas", expanded=True):
                 for d in dicas:
                     st.markdown(f"- {d}")
+                if rotinas:
+                    st.markdown("**Rotinas sugeridas:**")
+                    for r in rotinas:
+                        st.markdown(f"- {r}")
 
             st.caption("O resultado é uma ferramenta de apoio à decisão. O diagnóstico final deve ser feito pelo médico.")
 else:
