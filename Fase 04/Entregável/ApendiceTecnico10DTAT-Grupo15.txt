@@ -1,0 +1,6 @@
+Link do Streamlit: https://obesitydiagnosisgrupo15.streamlit.app/
+Link do PowerBI: https://app.powerbi.com/view?r=eyJrIjoiMzk0MGIzMzktNTlkZi00N2FjLWEzNTItNjY1Njk2ZjY4OGZiIiwidCI6IjExZGJiZmUyLTg5YjgtNDU0OS1iZTEwLWNlYzM2NGU1OTU1MSIsImMiOjR9
+Link do canva: https://www.canva.com/design/DAHCX9AzpJA/p8tKjS5MZ46rmdT2Imlm_g/edit
+Pipeline utilizado no Streamlit e Canva para o resultado: \Entregável\App\pipeline_obesidade_ml_TC4.ipynb
+Código do painel do Streamlit: \Entregável\App\painel_obesidade.py
+Outros gráficos utilizados para insights: obesidade.ipynb
