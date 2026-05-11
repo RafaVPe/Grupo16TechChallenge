@@ -67,7 +67,7 @@ st.markdown("### Sobre o trabalho")
 st.markdown(
     "Este projeto entrega a **análise exploratória e prescritiva** do case PEDE (Passos Mágicos), com dados "
     "unificados por **(RA, ano_cohorte)**, **dez perguntas de negócio** em painel interativo, **Insights** com "
-    "filtros e leituras automáticas, e um **modelo supervisionado** (Random Forest) que estima a probabilidade de "
+    "filtros e leituras automática, e um **modelo supervisionado** (Random Forest) que estima a probabilidade de "
     "**defasagem negativa** (fase efetiva abaixo da ideal), com simulador de cenários."
 )
 
@@ -106,7 +106,7 @@ with b1:
     if st.button("PEDE — 10 perguntas", type="secondary", use_container_width=True, help="Gráficos e textos das perguntas 1 a 10"):
         st.switch_page("pages/1_PEDE_10_perguntas.py")
 with b2:
-    if st.button("Insights", type="secondary", use_container_width=True, help="Filtros, leituras automáticas e painéis dinâmicos"):
+    if st.button("Insights", type="secondary", use_container_width=True, help="Filtros, leituras e painéis dinâmicos"):
         st.switch_page("pages/2_Insights.py")
 with b3:
     if st.button("Modelo / Predição", type="secondary", use_container_width=True, help="Simulador de risco com o modelo treinado"):

@@ -1,5 +1,5 @@
 """
-Leituras automáticas: textos derivados dos dados (painel unificado) e do recorte filtrado.
+Leituras: textos derivados dos dados (painel unificado) e do recorte filtrado.
 
 Compara o subconjunto filtrado à base completa quando o filtro não cobre 100% dos registros.
 """

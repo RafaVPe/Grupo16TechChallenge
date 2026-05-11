@@ -30,7 +30,7 @@ with head_r:
         st.switch_page("pages/3_Modelo_predicao.py")
 
 st.caption(
-    "Monte o **recorte** abaixo; **leituras automáticas** e gráficos atualizam na hora. "
+    "Monte o **recorte** abaixo; **leituras** e gráficos atualizam na hora. "
     "As abas organizam os painéis por tipo de pergunta de negócio."
 )
 
@@ -90,7 +90,7 @@ if not fases_sel:
         "escolha ao menos **uma fase** em *Fases escolares* acima."
     )
 
-st.subheader("Leituras automáticas")
+st.subheader("Leituras")
 for texto, tipo in gerar_insights(df, df_full):
     if tipo == "success":
         st.success(texto)
