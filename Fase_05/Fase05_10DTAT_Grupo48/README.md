@@ -12,13 +12,13 @@ pip install -r requirements.txt
 
 - CSVs na raiz: `BASE DE DADOS PEDE 2024 - DATATHON - PEDE2022.csv` (e 2023, 2024).
 - Unificação: `src/pede_cleaning.py` → `data_processed/pede_unificado.parquet`.
-- Notebook: `notebooks/01_limpeza_unificada.ipynb`.
+- Notebook (limpeza + modelagem para apresentação): `notebooks/Notebook_completo_modelagem_risco.ipynb`.
 
 ## Modelo de risco
 
 - **Automático:** ao subir o Streamlit, se faltar `data_processed/pede_unificado.parquet` ou `App/models/risk_defasagem.joblib`, o app **gera** (primeira execução pode levar ~1 minuto).
 - **Manual (opcional):** `python scripts/train_model.py` ou `python scripts/train_model.py --force` para forçar retreino.
-- Notebook: `notebooks/02_modelagem_risco.ipynb`.
+- O mesmo fluxo de modelagem está na seção 3 em diante do notebook completo acima.
 
 ## App Streamlit
 
