@@ -1,7 +1,8 @@
 import os
+import chromadb
+from google import genai
 
 from dotenv import load_dotenv
-from google import genai
 
 from telegram import Update
 from telegram.constants import ChatAction
@@ -12,76 +13,123 @@ from telegram.ext import (
     filters,
     CommandHandler
 )
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
 
-gauth = GoogleAuth()
-gauth.LoadCredentialsFile("credentials.json")
+# ---------------- ENV ---------------- #
 
-if gauth.credentials is None:
-    gauth.LocalWebserverAuth()
-elif gauth.access_token_expired:
-    gauth.Refresh()
-else:
-    gauth.Authorize()
-gauth.SaveCredentialsFile("credentials.json")
-
-drive = GoogleDrive(gauth)
-file_list = drive.ListFile({'q': "'1BsWJJSTAhfeVrjY8sQJFO7gQkuJ1Ju3Q' in parents and trashed=false"}).GetList()
-for file in file_list:
-    if "BASE" in file['title']:
-        file.GetContentFile(file['title']) # Baixa o CSV localmente
-
-# from src.pede_cleaning import build_unified, cleaning_report
-# OUT_PARQUET = ROOT / "data_processed" / "pede_unificado.parquet"
-# df = build_unified(root=ROOT, save_parquet=OUT_PARQUET)
-# cleaning_report(df)
-
-# carrega .env
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# cliente Gemini
-client = genai.Client(api_key=GOOGLE_API_KEY)
+# ---------------- CHROMADB ---------------- #
+
+chroma_client = chromadb.CloudClient(
+    api_key=os.getenv("CHROMA_API_KEY"),
+    tenant=os.getenv("CHROMA_TENANT"),
+    database=os.getenv("CHROMA_DATABASE")
+)
+
+collection = chroma_client.get_or_create_collection(name="passos_magicos_dados")
+
+# ---------------- GEMINI ---------------- #
+
+gemini_client = genai.Client(
+    api_key=GOOGLE_API_KEY
+)
+
+SYSTEM_PROMPT = """
+Você é um assistente virtual da ONG Passos Mágicos.
+
+REGRAS:
+- Responda de forma simples e fácil de entender.
+- Use linguagem amigável e acolhedora.
+- Limite as respostas a no máximo 2 parágrafos curtos.
+- Não use Markdown.
+- Não use listas longas.
+- Não use símbolos como #, *, _, ``` ou tabelas.
+- Use poucos emojis quando fizer sentido.
+- Seja direto e claro.
+- Caso não saiba a resposta, diga isso honestamente.
+- Priorize contexto educacional e social.
+"""
+
+# ------------ COMANDOS ------------ #
 
 #Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
-        "🤖 Sou o bot do grupo 48, vulgo melhor grupo da Postech FIAP.\n"
-        "🚀 Como podemos auxiliar a Passos Mágicos hoje?"
+        """🤖 Olá! Eu sou o assistente inteligente da Passos Mágicos.
+
+        Posso ajudar com:
+        📊 Indicadores educacionais
+        📈 Análises de desempenho
+        🎯 Risco de evasão
+        🧠 Explicações sobre INDE, IPV e fases
+        📚 Metodologia da ONG
+
+        Exemplos:
+        • "Qual a média do INDE em 2024?"
+        • "O que significa IPV?"
+        • "Qual pedra possui maior risco de evasão?"
+
+        🚀 Como posso ajudar?
+        """
     )
 
 # responder mensagens
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     pergunta = update.message.text
-
     try:
-        #Avise que está pensando
+        # avisa digitando
         await context.bot.send_chat_action(
             chat_id=update.effective_chat.id,
             action=ChatAction.TYPING
         )
-
-        resposta = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
-            contents=pergunta
+        # BUSCA CONTEXTO NO CHROMA
+        resultados = collection.query(
+            query_texts=[pergunta],
+            n_results=4
         )
+        documentos = resultados["documents"][0]
+        contexto = "\n".join(documentos)
+        # PROMPT FINAL
+        prompt = f"""
+        {SYSTEM_PROMPT}
+        CONTEXTO:
+        {contexto}
+        PERGUNTA:
+        {pergunta}
+        """
+        # GEMINI
+        resposta = gemini_client.models.generate_content(
+            model="gemini-3.1-flash-lite",
+            contents=prompt
+        )
+        texto_resposta = resposta.text
+        # fallback caso venha vazio
+        if not texto_resposta:
+
+            texto_resposta = (
+                "⚠️ Não consegui gerar uma resposta no momento."
+            )
 
         await update.message.reply_text(
-            resposta.text
+            texto_resposta
         )
 
     except Exception as e:
 
+        print("\nERRO:")
+        print(e)
+
         await update.message.reply_text(
-            f"Erro: {str(e)}"
+            "⚠️ O assistente está temporariamente indisponível.\n"
+            "Tente novamente em alguns instantes"
         )
 
-# telegram
+# ------------ Telegram App e Handlers ------------ #
+# Telegram App
 app = (ApplicationBuilder()
     .token(TELEGRAM_TOKEN)
     .connect_timeout(30)
@@ -91,16 +139,13 @@ app = (ApplicationBuilder()
 .build()
 )
 
-app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        responder
-    )
-)
+handlers = [
+    CommandHandler("start", start),
+    MessageHandler(filters.TEXT & ~filters.COMMAND, responder)
+]
 
-app.add_handler(
-    CommandHandler("start", start)
-)
+for h in handlers:
+    app.add_handler(h)
 
 print("Bot Gemini iniciado...")
 
