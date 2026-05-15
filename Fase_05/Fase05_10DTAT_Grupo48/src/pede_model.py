@@ -162,6 +162,47 @@ def ensure_parquet(root: Path | None = None) -> Path:
     return pq
 
 
+def load_bundle(path: Path | None = None) -> dict[str, Any]:
+    path = path or default_model_path()
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Modelo não encontrado: {path}. Abra o app Streamlit (gera automaticamente) ou rode: python scripts/train_model.py"
+        )
+    return joblib.load(path)
+
+
+def predict_row(bundle: dict[str, Any], row: dict[str, Any]) -> float:
+    """Retorna probabilidade da classe positiva (defasagem < 0)."""
+    cols = bundle["numeric_features"] + bundle["categorical_features"]
+    X = pd.DataFrame([{k: row.get(k, np.nan) for k in cols}])
+    return float(bundle["pipeline"].predict_proba(X)[0, 1])
+
+
+def _row_from_defaults(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Uma linha sintética para validar o pipeline (mesmos defaults salvos no bundle)."""
+    row: dict[str, Any] = {}
+    row.update(dict(bundle.get("defaults_numeric") or {}))
+    row.update(dict(bundle.get("defaults_cat") or {}))
+    for c in bundle.get("categorical_features") or []:
+        if c in row and row[c] is not None and not isinstance(row[c], str):
+            row[c] = str(row[c])
+    return row
+
+
+def _bundle_predict_ok(bundle: dict[str, Any]) -> bool:
+    """
+    Detecta joblib treinado com outra versão do scikit-learn (pickle não é portável entre versões).
+
+    Em produção (ex.: Streamlit Cloud com Python/sklearn novos), isso evita ``AttributeError``
+    no ``SimpleImputer.transform`` ao forçar retreino automático.
+    """
+    try:
+        predict_row(bundle, _row_from_defaults(bundle))
+        return True
+    except Exception:
+        return False
+
+
 def ensure_model_saved(root: Path | None = None, *, force: bool = False) -> Path:
     """
     Garante parquet + arquivo ``risk_defasagem.joblib``.
@@ -177,6 +218,8 @@ def ensure_model_saved(root: Path | None = None, *, force: bool = False) -> Path
             b = joblib.load(out)
             if b.get("numeric_features") != NUMERIC_FEATURES or b.get("categorical_features") != CATEGORICAL_FEATURES:
                 force = True
+            elif not _bundle_predict_ok(b):
+                force = True
         except Exception:
             force = True
     if force and out.exists():
@@ -187,19 +230,3 @@ def ensure_model_saved(root: Path | None = None, *, force: bool = False) -> Path
     res = train_risk_model(df)
     save_bundle(out, res)
     return out
-
-
-def load_bundle(path: Path | None = None) -> dict[str, Any]:
-    path = path or default_model_path()
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Modelo não encontrado: {path}. Abra o app Streamlit (gera automaticamente) ou rode: python scripts/train_model.py"
-        )
-    return joblib.load(path)
-
-
-def predict_row(bundle: dict[str, Any], row: dict[str, Any]) -> float:
-    """Retorna probabilidade da classe positiva (defasagem < 0)."""
-    cols = bundle["numeric_features"] + bundle["categorical_features"]
-    X = pd.DataFrame([{k: row.get(k, np.nan) for k in cols}])
-    return float(bundle["pipeline"].predict_proba(X)[0, 1])
