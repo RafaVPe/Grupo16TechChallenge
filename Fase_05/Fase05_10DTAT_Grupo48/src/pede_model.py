@@ -21,10 +21,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.pede_cleaning import PROJECT_ROOT, build_unified
+from src.pede_cleaning import PROJECT_ROOT, build_unified, _fase_series_to_int64
 
 NUMERIC_FEATURES: list[str] = [
     "idade_referencia",
+    "fase",
     "ano_ingresso",
     "cg",
     "cf",
@@ -50,6 +51,7 @@ CATEGORICAL_FEATURES: list[str] = ["genero"]
 def build_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
     """Monta X, y com alvo binário defasagem < 0."""
     work = df.copy()
+    work["fase"] = _fase_series_to_int64(work["fase"])
     work["__y"] = (work["defasagem"] < 0).astype(int)
     X = work[NUMERIC_FEATURES + CATEGORICAL_FEATURES].copy()
     for c in CATEGORICAL_FEATURES:
@@ -170,6 +172,13 @@ def ensure_model_saved(root: Path | None = None, *, force: bool = False) -> Path
     root = root or PROJECT_ROOT
     ensure_parquet(root)
     out = default_model_path(root)
+    if out.exists() and not force:
+        try:
+            b = joblib.load(out)
+            if b.get("numeric_features") != NUMERIC_FEATURES or b.get("categorical_features") != CATEGORICAL_FEATURES:
+                force = True
+        except Exception:
+            force = True
     if force and out.exists():
         out.unlink()
     if out.exists() and not force:

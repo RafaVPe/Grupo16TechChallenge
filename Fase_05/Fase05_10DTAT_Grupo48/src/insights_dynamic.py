@@ -15,7 +15,7 @@ def aplicar_filtros(
     df: pd.DataFrame,
     anos: list[int] | None,
     generos: list[str] | None,
-    fases: list[str] | None,
+    fases: list[int] | list[str] | None,
 ) -> pd.DataFrame:
     out = df.copy()
     if anos:
@@ -23,7 +23,14 @@ def aplicar_filtros(
     if generos:
         out = out[out["genero"].isin(generos)]
     if fases:
-        out = out[out["fase"].astype(str).isin(fases)]
+        sel: set[int] = set()
+        for x in fases:
+            try:
+                sel.add(int(float(str(x).strip())))
+            except (TypeError, ValueError):
+                continue
+        if sel:
+            out = out[out["fase"].isin(sel)]
     return out
 
 
