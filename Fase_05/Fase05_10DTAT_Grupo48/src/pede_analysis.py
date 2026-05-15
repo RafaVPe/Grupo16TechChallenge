@@ -82,8 +82,9 @@ def tab_q1_ian(df: pd.DataFrame) -> tuple[Any, str]:
 
 
 def tab_q2_ida(df: pd.DataFrame) -> tuple[Any, str]:
-    d = df.dropna(subset=["ida"])
+    d = df.dropna(subset=["ida", "fase"])
     agg = d.groupby(["ano_cohorte", "fase"], as_index=False)["ida"].mean()
+    agg = agg.sort_values(["ano_cohorte", "fase"])
     fig = px.line(
         agg,
         x="fase",
@@ -157,12 +158,18 @@ def tab_q4_iaa(df: pd.DataFrame) -> tuple[Any, str]:
     r_iaa_ida = d["iaa"].corr(d["ida"])
     r_iaa_ieg = d["iaa"].corr(d["ieg"])
     dispersos = int(((d["iaa"] >= 8) & (d["ida"] < 5)).sum())
+    leitura_ida = (
+        "baixa" if abs(r_iaa_ida) < 0.25 else "moderada" if abs(r_iaa_ida) < 0.55 else "alta"
+    )
+    leitura_ieg = (
+        "baixa" if abs(r_iaa_ieg) < 0.25 else "moderada" if abs(r_iaa_ieg) < 0.55 else "alta"
+    )
     txt = f"""
 #### Resposta à pergunta 4
 
-- **Coerência IAA × IDA:** correlação **≈ {r_iaa_ida:.2f}** — há tendência de alinhamento, mas **não é 1:1**
-  (muita dispersão no gráfico).
-- **Coerência IAA × IEG:** **≈ {r_iaa_ieg:.2f}**.
+- **Coerência IAA × IDA:** correlação **≈ {r_iaa_ida:.2f}** — coerência agregada **{leitura_ida}**.
+  O IAA vem de autoavaliação padronizada, então mede percepção/escuta do aluno, não desempenho direto.
+- **Coerência IAA × IEG:** **≈ {r_iaa_ieg:.2f}** — coerência agregada **{leitura_ieg}**.
 - **Incoerências úteis:** existem **{dispersos:,}** registros com **IAA alto (≥8)** e **IDA baixo (<5)** —
   percepção melhor que o resultado; merecem conversa e diagnóstico (dificuldade técnica, teste, frequência etc.).
 - **Implicação:** use IAA como escuta ativa, não como substituto de IDA/IEG.
@@ -214,6 +221,7 @@ def tab_q6_ipp_ian(df: pd.DataFrame) -> tuple[Any, str]:
 #### Resposta à pergunta 6
 
 - **Dado:** no layout **2022** não há coluna IPP no CSV original; a maior parte das linhas com IPP vem de **2023/2024**.
+- **Regra PEDE:** no INDE oficial, **IPP é ponderado apenas nas fases 0–7**; para **fase 8** ele é **N/A**.
 - **Conclusão:** com amostra pequena, não é possível afirmar confirmação/contradição robusta entre IPP e IAN neste app.
 - **Implicação:** replique o cruzamento no notebook com testes e exemplos de caso a caso.
 """.strip()
@@ -238,6 +246,7 @@ def tab_q6_ipp_ian(df: pd.DataFrame) -> tuple[Any, str]:
 
 - **Leitura agregada:** correlação Pearson **IAN × IPP ≈ {r:.2f}** em **{len(d):,}** registros com ambos preenchidos
   (de {len(d_all):,} com IAN).
+- **Regra PEDE:** no INDE oficial, **IPP é ponderado apenas nas fases 0–7**; para **fase 8** ele é **N/A**.
 - **Confirmam ou contradizem?** No agregado, os dados {conc}
 - **Implicação:** em divergências pontuais (IAN severo e IPP alto), marque revisão multidisciplinar.
 """.strip()
@@ -276,18 +285,25 @@ def tab_q7_ipv(df: pd.DataFrame) -> tuple[Any, str]:
 
 
 def tab_q8_inde_dim(df: pd.DataFrame) -> tuple[Any, str]:
-    d = df.dropna(subset=["inde_cohorte", "ida", "ieg", "ips", "ipp"])
-    corr = d[["inde_cohorte", "ida", "ieg", "ips", "ipp"]].corr()["inde_cohorte"].drop("inde_cohorte").sort_values(ascending=False)
+    oficiais_0_7 = ["ian", "ida", "ieg", "iaa", "ips", "ipp", "ipv"]
+    d = df.dropna(subset=["inde_cohorte", "fase"]).copy()
+    d = d[d["fase"] < 8]
+    d = d.dropna(subset=[c for c in oficiais_0_7 if c in d.columns])
+    corr = d[["inde_cohorte"] + oficiais_0_7].corr()["inde_cohorte"].drop("inde_cohorte").sort_values(ascending=False)
     cdf = pd.DataFrame({"indicador": corr.index.astype(str), "r": corr.values})
-    fig = px.bar(cdf, x="indicador", y="r", title="Correlação de cada dimensão com o INDE (por ano do painel)")
+    fig = px.bar(cdf, x="indicador", y="r", title="Correlação de cada dimensão oficial com o INDE (fases 0–7)")
     melhor = corr.index[0]
+    pesos_0_7 = "IAN 10%, IDA 20%, IEG 20%, IAA 10%, IPS 10%, IPP 10%, IPV 20%"
+    pesos_8 = "IAN 10%, IDA 40%, IEG 20%, IAA 10%, IPS 20% (IPP/IPV N/A)"
     txt = f"""
 #### Resposta à pergunta 8
 
-- **Combinação:** no conjunto, todas as dimensões **IDA, IEG, IPS e IPP** correlacionam positivamente com **INDE**;
-  a que apresenta **maior correlação simples** com INDE aqui é **{melhor}** (r = **{corr.iloc[0]:.2f}**).
-- **Ressalva:** o INDE oficial é **ponderado** (pesos diferentes por fase — ver `pede_pontos_importantes.md`); correlações simples **não** reproduzem a fórmula, apenas indicam **força de associação linear** no painel.
-- **Implicação:** elevar a dimensão com maior r costuma puxar o INDE neste recorte, mas o melhor plano continua sendo **equilibrar** as quatro frentes.
+- **Regra oficial do INDE:** fases **0–7** usam **{pesos_0_7}**; fase **8** usa **{pesos_8}**.
+- **Combinação nas fases 0–7:** as dimensões oficiais se associam positivamente ao **INDE**; a maior correlação simples
+  neste painel é **{melhor}** (r = **{corr.iloc[0]:.2f}**).
+- **Leitura:** pela fórmula, **IDA, IEG e IPV** têm maior peso nas fases 0–7; na fase 8, **IDA** ganha peso central.
+  As correlações do gráfico são diagnóstico exploratório e **não substituem** a fórmula ponderada oficial.
+- **Implicação:** priorize combinações que preservem equilíbrio, mas dê atenção extra às dimensões com maior peso oficial em cada fase.
 """.strip()
     return fig, txt
 
@@ -420,7 +436,8 @@ def tab_q10_efetividade(df: pd.DataFrame) -> tuple[Any, str]:
     txt = f"""
 #### Resposta à pergunta 10
 
-- **Proxy de “melhora no ciclo”:** ordenamos Quartzo→Ágata→Ametista→Topázio e calculamos a **média por ano** da pedra atual.
+- **Proxy de “melhora no ciclo”:** as **Pedras** são faixas/conceitos derivados do INDE, não fases escolares.
+  Ordenamos Quartzo→Ágata→Ametista→Topázio e calculamos a **média por ano** da pedra atual.
   {prog.capitalize()}
 - **Topázio (fração de alunos):** {", ".join(f"**{int(y)}**: {float(v):.1%}" for y, v in share_top.items())} — ajuda a ver se o recorte **premium** cresce.
 - **Ressalva:** isso **não prova impacto causal** do programa (seleção, entrada/saída de alunos, mudança de regra). Confirmação de impacto exige desenho contrafactual ou séries mais longas.

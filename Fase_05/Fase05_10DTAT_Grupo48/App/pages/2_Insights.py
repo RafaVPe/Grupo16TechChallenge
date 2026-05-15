@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.insights_dynamic import aplicar_filtros, gerar_insights
-from src.pede_cleaning import PROJECT_ROOT
+from src.pede_cleaning import PROJECT_ROOT, apply_fase_column_normalization
 from src.streamlit_bootstrap import ensure_streamlit_artifacts
 
 ensure_streamlit_artifacts(PROJECT_ROOT)
@@ -38,12 +38,12 @@ if not PROCESSED.exists():
     st.error("Não foi possível gerar o parquet. Verifique se os CSVs estão na raiz do projeto.")
     st.stop()
 
-df_full = pd.read_parquet(PROCESSED)
+df_full = apply_fase_column_normalization(pd.read_parquet(PROCESSED))
 
 anos_opts = sorted(df_full["ano_cohorte"].dropna().unique().astype(int).tolist())
 gen_opts = sorted(df_full["genero"].dropna().astype(str).unique().tolist())
-fase_counts = df_full["fase"].astype(str).value_counts()
-top_fases = fase_counts.head(35).index.tolist()
+fase_opts = sorted(int(x) for x in df_full["fase"].dropna().unique().tolist())
+top_fases = [str(x) for x in fase_opts]
 
 # Painel de filtros no corpo da página (sem sidebar) — hierarquia: recorte → aviso fases → leituras → abas
 _filter_shell = (
@@ -73,8 +73,8 @@ with _filter_shell:
             options=top_fases,
             default=[],
             help=(
-                "Sem seleção: **todas** as fases entram no recorte (números mais agregados). "
-                "Lista limitada às 35 fases mais frequentes na base unificada."
+                "Sem seleção: **todas** as fases entram no recorte. Valores **0–8** = nível de aprendizado "
+                "harmonizado (Alfa→0; 1/1A/1B→1; … até 8), conforme `pede_cleaning.normalize_fase_escolar`."
             ),
         )
 
@@ -145,7 +145,7 @@ with tab_risco:
     agg = (
         d.groupby(["ano_cohorte", "fase"], as_index=False)["defas_neg"]
         .mean()
-        .sort_values(["ano_cohorte", "defas_neg"], ascending=[True, False])
+        .sort_values(["ano_cohorte", "fase"], ascending=[True, True])
     )
     fig1 = px.bar(
         agg.head(36),
@@ -153,7 +153,7 @@ with tab_risco:
         y="defas_neg",
         color="ano_cohorte",
         barmode="group",
-        title="Taxa de defasagem negativa por fase (até 36 linhas fase×ano)",
+        title="Taxa de defasagem negativa por fase (níveis 0–8 × ano)",
         labels={"defas_neg": "Proporção", "fase": "Fase"},
     )
     fig1.update_layout(template="plotly_dark", height=520, xaxis_tickangle=-45)

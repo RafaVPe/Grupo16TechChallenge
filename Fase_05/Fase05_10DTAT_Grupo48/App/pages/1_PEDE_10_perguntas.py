@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
 
 from src.pede_analysis import TAB_FUNCS, TAB_TITLES
 from src.pede_questions import QUESTIONS_TEXT
-from src.pede_cleaning import PROJECT_ROOT, build_unified, cleaning_report
+from src.pede_cleaning import PROJECT_ROOT, build_unified, cleaning_report, apply_fase_column_normalization
 from src.streamlit_bootstrap import ensure_streamlit_artifacts
 
 PROCESSED = PROJECT_ROOT / "data_processed" / "pede_unificado.parquet"
@@ -40,7 +40,7 @@ _DATATHON_STRIP = """
 @st.cache_data(show_spinner=True)
 def carregar_base() -> pd.DataFrame:
     if PROCESSED.exists():
-        return pd.read_parquet(PROCESSED)
+        return apply_fase_column_normalization(pd.read_parquet(PROCESSED))
     PROCESSED.parent.mkdir(parents=True, exist_ok=True)
     return build_unified(save_parquet=PROCESSED)
 

@@ -12,11 +12,14 @@ Regras principais
   com nomes estáveis (podem repetir valores já vistos em anos anteriores —
   isso é esperado em painel, não é erro de merge).
 - Números com vírgula decimal (pt-BR) convertidos para float.
+- Coluna ``fase`` (nível de aprendizado) normalizada para inteiros **0–8** após o empilhamento
+  (Alfa/Alpha → 0; ``1``/``1A``/``1B``/``Fase 1`` → 1; … até 8; valores não reconhecíveis → ``NA``).
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +96,88 @@ def load_raw_csv(path: Path, encoding: str = "utf-8") -> pd.DataFrame:
     # normaliza nomes internos para merge
     df.columns = [_norm_col(c) for c in df.columns]
     return df
+
+
+def normalize_fase_escolar(value: Any) -> float:
+    """
+    Converte rótulos brutos de fase (nível de aprendizado) em escalar 0..8 ou NaN.
+
+    Regras (alinhado à documentação PEDE: turmas 1A/1B/1C vs nível):
+    - ``Alfa`` / ``Alpha`` (com ou sem acentos) → 0; ``0`` → 0.
+    - Um dígito inicial ``0``–``8`` seguido apenas de letras, hífen, espaço ou pontuação
+      (ex.: ``1``, ``1A``, ``2M``, ``Fase 8 (Universitários)`` após remover prefixo ``Fase``) → esse dígito.
+    - Números inteiros/float já entre 0 e 8 → preservados.
+    - Qualquer outro padrão (ex.: ``9``, ``12``, texto sem dígito) → NaN.
+    """
+    if value is None:
+        return np.nan
+    if isinstance(value, (bool, np.bool_)):
+        return np.nan
+    if isinstance(value, (int, np.integer)):
+        v = int(value)
+        return float(v) if 0 <= v <= 8 else np.nan
+    if isinstance(value, (float, np.floating)):
+        if np.isnan(value):
+            return np.nan
+        v = int(round(float(value)))
+        return float(v) if 0 <= v <= 8 else np.nan
+
+    s = _strip_bom(value)
+    if s == "" or s.lower() in {"nan", "none", "na", "n/a"}:
+        return np.nan
+
+    def _fold(t: str) -> str:
+        t = unicodedata.normalize("NFD", t)
+        return "".join(ch for ch in t if unicodedata.category(ch) != "Mn").lower()
+
+    raw = str(s).strip()
+    low = _fold(raw)
+    if low in {"alfa", "alpha"}:
+        return 0.0
+
+    # remove prefixo "Fase" / "FASE" opcional
+    t = re.sub(r"^fase\s*", "", raw, flags=re.IGNORECASE).strip()
+    low_t = _fold(t)
+    if low_t in {"alfa", "alpha"}:
+        return 0.0
+
+    if re.fullmatch(r"[0-8]", t):
+        return float(t)
+
+    m_let = re.fullmatch(r"([0-8])(\D+)", t)
+    if m_let:
+        return float(int(m_let.group(1)))
+
+    m_sfx = re.match(r"^([0-8])(.+)$", t)
+    if m_sfx:
+        digit = int(m_sfx.group(1))
+        rest = m_sfx.group(2)
+        if re.search(r"\d", rest):
+            return np.nan
+        return float(digit)
+
+    return np.nan
+
+
+def _fase_series_to_int64(series: pd.Series) -> pd.Series:
+    mapped = series.map(normalize_fase_escolar)
+    out: list[int | None] = []
+    for v in mapped.tolist():
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            out.append(None)
+        else:
+            iv = int(round(float(v)))
+            out.append(iv if 0 <= iv <= 8 else None)
+    return pd.Series(out, index=series.index, dtype="Int64")
+
+
+def apply_fase_column_normalization(df: pd.DataFrame) -> pd.DataFrame:
+    """Garante coluna ``fase`` como inteiro 0–8 (nullable), inclusive em parquets antigos."""
+    if "fase" not in df.columns:
+        return df
+    out = df.copy()
+    out["fase"] = _fase_series_to_int64(out["fase"])
+    return out
 
 
 def _parse_genero(s: Any) -> str:
@@ -227,6 +312,7 @@ def build_unified(
         raw = load_raw_csv(path)
         parts.append(harmonize_year(raw, ano))
     out = pd.concat(parts, ignore_index=True)
+    out["fase"] = _fase_series_to_int64(out["fase"])
 
     # validação de unicidade (RA, ano)
     dup_mask = out.duplicated(subset=["ra", "ano_cohorte"], keep=False)
@@ -253,4 +339,5 @@ def cleaning_report(df: pd.DataFrame) -> dict[str, Any]:
         "cols": list(df.columns),
         "na_rate_inde_cohorte": float(df["inde_cohorte"].isna().mean()),
         "na_rate_ian": float(df["ian"].isna().mean()),
+        "na_rate_fase": float(df["fase"].isna().mean()),
     }

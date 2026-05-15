@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.pede_cleaning import PROJECT_ROOT
+from src.pede_cleaning import PROJECT_ROOT, apply_fase_column_normalization
 from src.pede_model import default_model_path, load_bundle, predict_row
 from src.streamlit_bootstrap import ensure_streamlit_artifacts
 
@@ -33,6 +33,10 @@ FEATURE_HELP: dict[str, str] = {
         "**O que é:** **ano do painel** em que aquela linha foi observada (no banco: coluna `ano_cohorte`, valores 2022, 2023 ou 2024). "
         "É o ano da “foto” do PEDE na base harmonizada — não confundir com **ano de ingresso**.\n\n"
         "**Importância:** contextualiza mudanças de formulário e de política por ano."
+    ),
+    "fase": (
+        "**O que é:** **nível de aprendizado** (0–8) após harmonização: Alfa/Alpha→0; ``1``/``1A``/``1B``→1; … até 8.\n\n"
+        "**Como usar:** escolha entre os níveis que aparecem na base deste projeto."
     ),
     "cg": (
         "**O que é:** contador/acúmulo de marcas relativas ao eixo CG no acompanhamento pedagógico (convenção dos CSVs).\n\n"
@@ -83,6 +87,7 @@ def _label(col: str) -> str:
         "idade_referencia": "Idade (referência)",
         "ano_ingresso": "Ano de ingresso",
         "ano_cohorte": "Ano do painel PEDE",
+        "fase": "Fase (nível 0–8)",
         "cg": "CG",
         "cf": "CF",
         "ct": "CT",
@@ -169,7 +174,7 @@ MODEL_PATH = default_model_path(PROJECT_ROOT)
 PARQUET = PROJECT_ROOT / "data_processed" / "pede_unificado.parquet"
 
 bundle = load_bundle(MODEL_PATH)
-df_ref = pd.read_parquet(PARQUET) if PARQUET.exists() else None
+df_ref = apply_fase_column_normalization(pd.read_parquet(PARQUET)) if PARQUET.exists() else None
 
 defaults_num = bundle["defaults_numeric"]
 defaults_cat = bundle["defaults_cat"]
@@ -202,7 +207,7 @@ with st.expander("Definição do alvo, features e limitações", expanded=False)
         )
     )
     st.markdown(
-        "- **Entradas:** indicadores psicoacadêmicos e histórico de INDE **sem** `ian` nem `defasagem`.\n"
+        "- **Entradas:** indicadores psicoacadêmicos, **fase** (nível 0–8 harmonizado), histórico de INDE **sem** `ian` nem `defasagem`.\n"
         "- **Uso:** apoio à triagem; não substitui avaliação humana.\n"
         "- **Retreino:** `python scripts/train_model.py` após atualizar o parquet."
     )
@@ -222,10 +227,11 @@ with _shell:
     _tab_ctx, _tab_ped, _tab_inde = st.tabs(["Contexto do aluno", "Indicadores PEDE", "INDE Histórico"])
 
     with _tab_ctx:
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         anos_cohorte = _int_uniques(df_ref, "ano_cohorte") or [2022, 2023, 2024]
         anos_ing = _int_uniques(df_ref, "ano_ingresso") or list(range(2016, 2025))
         idades = _int_uniques(df_ref, "idade_referencia") or list(range(7, 28))
+        fases_m = _int_uniques(df_ref, "fase") or list(range(0, 9))
 
         with c1:
             row["ano_cohorte"] = float(
@@ -255,6 +261,17 @@ with _shell:
                     format_func=lambda y: str(int(y)),
                     index=_nearest_index(idades, defaults_num.get("idade_referencia", idades[len(idades) // 2])),
                     help=FEATURE_HELP["idade_referencia"],
+                )
+            )
+
+        with c4:
+            row["fase"] = float(
+                st.selectbox(
+                    _label("fase"),
+                    options=fases_m,
+                    format_func=lambda y: str(int(y)),
+                    index=_nearest_index(fases_m, defaults_num.get("fase", fases_m[len(fases_m) // 2])),
+                    help=FEATURE_HELP["fase"],
                 )
             )
 
